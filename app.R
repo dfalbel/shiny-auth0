@@ -20,8 +20,8 @@ if (interactive()) {
 # Note that secret is not really secret, and it's fine to include inline
 app <- oauth_app(
     "shiny-auth0",
-    key = "{your Client ID}",
-    secret = "{your Client Secret}",
+    key = "{your client id}",
+    secret = "{your client secret}",
     redirect_uri = APP_URL
 )
 
@@ -33,18 +33,22 @@ api <- oauth_endpoint(
     access = "oauth/token"
 )
 
+state <- paste(sample(c(letters, LETTERS, 0:9), size = 10, replace = TRUE), collapse = "")
+
 # Always request the minimal scope needed. For github, an empty scope
 # gives read-only access to public info
 scope <- "openid profile"
 
 # Shiny -------------------------------------------------------------------
 
-has_auth_code <- function(params) {
-    # params is a list object containing the parsed URL parameters. Return TRUE if
-    # based on these parameters, it looks like auth codes are present that we can
-    # use to get an access token. If not, it means we need to go through the OAuth
-    # flow.
-    return(!is.null(params$code))
+has_auth_code <- function(params, state) {
+    if (is.null(params$code)) {
+        return(FALSE)
+    } else if (params$state != state) {
+        return(FALSE)
+    } else {
+        return(TRUE)
+    }
 }
 
 ui <- fluidPage(
@@ -58,8 +62,8 @@ ui <- fluidPage(
 # ui.R/server.R style files, that's fine too--just make this function the last
 # expression in your ui.R file.
 uiFunc <- function(req) {
-    if (!has_auth_code(parseQueryString(req$QUERY_STRING))) {
-        url <- oauth2.0_authorize_url(api, app, scope = scope)
+    if (!has_auth_code(parseQueryString(req$QUERY_STRING), state)) {
+        url <- oauth2.0_authorize_url(api, app, scope = scope, state = state)
         redirect <- sprintf("location.replace(\"%s\");", url)
         tags$script(HTML(redirect))
     } else {
@@ -69,7 +73,7 @@ uiFunc <- function(req) {
 
 server <- function(input, output, session) {
     params <- parseQueryString(isolate(session$clientData$url_search))
-    if (!has_auth_code(params)) {
+    if (!has_auth_code(params, state)) {
         return()
     }
     
